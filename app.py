@@ -13,41 +13,33 @@ import pandas as pd
 from scipy import stats
 
 def set_korean_font():
-    system_name = platform.system()
-    if system_name == "Windows":
-        plt.rcParams["font.family"] = "Malgun Gothic"
-    elif system_name == "Darwin":
-        plt.rcParams["font.family"] = "AppleGothic"
+    import matplotlib.pyplot as plt
+    import matplotlib.font_manager as fm
+    import os
+
+    # 리눅스 시스템(Streamlit Cloud)에 설치된 나눔고딕 기본 경로
+    font_path = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
+
+    if os.path.exists(font_path):
+        # 1. 폰트 파일을 폰트 매니저에 수동으로 직접 등록
+        fm.fontManager.addfont(font_path)
+        # 2. 등록된 폰트의 정확한 이름을 가져와서 설정
+        font_name = fm.FontProperties(fname=font_path).get_name()
+        plt.rcParams["font.family"] = font_name
     else:
-        try:
-            result = subprocess.run(
-                ["fc-list", ":lang=ko", "file"], capture_output=True, text=True, check=False
-            )
-            font_paths = [line.strip().rstrip(":") for line in result.stdout.splitlines() if line.strip()]
-        except FileNotFoundError:
-            font_paths = []
+        # 윈도우나 맥 등 로컬 환경 환경 대응용 백업 설정
+        import platform
+        system_name = platform.system()
+        if system_name == "Windows":
+            plt.rcParams["font.family"] = "Malgun Gothic"
+        elif system_name == "Darwin":
+            plt.rcParams["font.family"] = "AppleGothic"
 
-        priority_keywords = ["NanumGothic", "NotoSansCJK", "NotoSansKR"]
-        font_path = None
-        for keyword in priority_keywords:
-            font_path = next((p for p in font_paths if keyword.lower() in p.lower()), None)
-            if font_path:
-                break
-        if font_path is None and font_paths:
-            font_path = font_paths[0]
-
-        if font_path:
-            fm.fontManager.addfont(font_path)
-            font_name = fm.FontProperties(fname=font_path).get_name()
-            plt.rcParams["font.family"] = font_name
-        else:
-            print("   sudo apt-get update && sudo apt-get install -y fonts-nanum")
-
+    # 마이너스 기호 깨짐 방지
     plt.rcParams["axes.unicode_minus"] = False
 
-
+# 함수 실행
 set_korean_font()
-
 TOPICS = ["기후 변화", "원자력 발전", "기본소득제", "자율주행 자동차", "SNS의 영향"]
 
 NUANCES = {
