@@ -154,8 +154,20 @@ def run_experiment_with_checkpoint(df_prompts: pd.DataFrame) -> pd.DataFrame:
     total = len(df_prompts)
     new_rows = df_exist.to_dict(orient="records")
 
+    # 💡 [추가] 웹 화면에 실시간으로 진행률을 보여줄 Streamlit 컴포넌트 생성
+    progress_text = st.empty()
+    progress_bar = st.progress(0)
+
     for idx, row in df_prompts.iterrows():
         question = row["질문"]
+        
+        # 현재 몇 번째 진행 중인지 비율 계산 (0.0 ~ 1.0)
+        current_progress = (idx + 1) / total
+        
+        # 💡 [추가] 웹 화면 텍스트와 바 업데이트
+        progress_text.markdown(f"**⏳ 총 {total}개 중 {idx + 1}번째 질의 중...** (완료: {int(current_progress * 100)}%)")
+        progress_bar.progress(current_progress)
+
         if question in completed_questions:
             continue
             
@@ -180,8 +192,12 @@ def run_experiment_with_checkpoint(df_prompts: pd.DataFrame) -> pd.DataFrame:
             
         except Exception as e:
             print(f"\n🛑 에러 또는 한도 초과 발생: {e}")
-            print("현재까지의 데이터를 안전하게 저장했습니다. 다시 실행하면 이 시점부터 이어집니다.")
+            st.error(f"실험 중 오류가 발생했습니다: {e}")
             break
+
+    # 💡 [추가] 끝나면 진행바와 진행 텍스트 깔끔하게 숨기기
+    progress_text.empty()
+    progress_bar.empty()
 
     df_final = pd.DataFrame(new_rows)
     if df_final.empty:
@@ -189,7 +205,6 @@ def run_experiment_with_checkpoint(df_prompts: pd.DataFrame) -> pd.DataFrame:
     
     df_final.columns = df_final.columns.astype(str).str.strip()
     return df_final
-
 
 def summarize_and_plot(df: pd.DataFrame, save_path: str = "bias_result.png"):
     n = len(df)
