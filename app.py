@@ -265,3 +265,60 @@ if __name__ == "__main__":
     
     summarize_and_plot(results)
     run_statistical_tests(results)
+
+    # 1. 웹 화면 타이틀 구성
+    st.set_page_config(page_title="LLM 편향성 분석", layout="wide")
+    st.title("📊 LLM 프롬프트 유도 유형별 편향성 분석")
+    st.write("GitHub Models API(gpt-4o-mini)를 활용하여 프롬프트 어조에 따른 LLM의 응답 성향을 분석합니다.")
+    
+    # GITHUB_TOKEN 체크
+    if not os.environ.get("GITHUB_TOKEN"):
+        st.error("🚨 환경변수 GITHUB_TOKEN이 설정되어 있지 않습니다. Streamlit Secrets 설정을 확인해 주세요.")
+        st.stop()
+
+    # 2. 사이드바 또는 상단에 실험 시작 버튼 배치
+    st.subheader("⚙️ 실험 제어 패널")
+    
+    # 세션 상태 초기화 (실행 여부 저장)
+    if "experiment_done" not in st.session_state:
+        st.session_state.experiment_done = False
+
+    if st.button(" LLM 분석 실험 시작 / 이어서 진행", type="primary"):
+        with st.spinner("LLM 질의 및 통계 분석이 진행 중..."):
+            all_prompts = build_prompts(n_repeats=N_REPEATS)
+            
+            # 실험 실행
+            results = run_experiment_with_checkpoint(all_prompts)
+            
+            # 요약 및 그래프 저장
+            summarize_and_plot(results)
+            
+            # 통계 데이터 세션에 저장
+            st.session_state.results = results
+            st.session_state.experiment_done = True
+        st.success(" 분석 완료")
+
+    # 3. 실험 결과가 있거나 이미 완료된 경우 화면에 출력
+    if st.session_state.experiment_done or os.path.exists(PROGRESS_FILE):
+        st.markdown("---")
+        st.subheader("분석 결과")
+        
+        # 저장된 결과 파일 읽어오기
+        try:
+            df_res = pd.read_csv(PROGRESS_FILE, encoding="utf-8-sig")
+            
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                st.markdown("### 수집된 데이터 표")
+                st.dataframe(df_res, use_container_width=True)
+                
+            with col2:
+                st.markdown("### 어조 분포 그래프 (Boxplot)")
+                if os.path.exists("bias_result.png"):
+                    st.image("bias_result.png", use_container_width=True)
+                else:
+                    st.warning("그래프 이미지 파일(bias_result.png)을 찾을 수 없습니다.")
+                    
+        except Exception as e:
+            st.error(f"결과 데이터를 불러오는 중 오류가 발생했습니다: {e}")
