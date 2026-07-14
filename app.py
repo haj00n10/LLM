@@ -269,7 +269,7 @@ if __name__ == "__main__":
 
     # 1. 웹 화면 타이틀 구성
     st.set_page_config(page_title="LLM 편향성 분석", layout="wide")
-    st.title("📊 LLM 프롬프트 유도 유형별 편향성 분석")
+    st.title("LLM 프롬프트 유도 유형별 편향성 분석")
     st.write("GitHub Models API(gpt-4o-mini)를 활용하여 프롬프트 어조에 따른 LLM의 응답 성향을 분석합니다.")
     
     # GITHUB_TOKEN 체크
@@ -278,7 +278,6 @@ if __name__ == "__main__":
         st.stop()
 
     # 2. 사이드바 또는 상단에 실험 시작 버튼 배치
-    st.subheader("⚙️ 실험 제어 패널")
     
     # 세션 상태 초기화 (실행 여부 저장)
     if "experiment_done" not in st.session_state:
@@ -315,7 +314,7 @@ if __name__ == "__main__":
                 st.dataframe(df_res, use_container_width=True)
                 
             with col2:
-                st.markdown("### 어조 분포 그래프 (Boxplot)")
+                st.markdown("### 어조 분포 그래프 ")
                 if os.path.exists("bias_result.png"):
                     st.image("bias_result.png", use_container_width=True)
                 else:
