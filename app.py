@@ -219,30 +219,40 @@ def summarize_and_plot(df: pd.DataFrame, save_path: str = "bias_result.png"):
 
 def run_statistical_tests(df: pd.DataFrame, alpha: float = 0.05):
     if df["유형"].nunique() < 2 or len(df) < 5:
+        st.warning("📊 통계 검정을 진행하기 위한 그룹 수 또는 데이터가 부족합니다.")
         return
         
     groups = {name: g["긍정"].values for name, g in df.groupby("유형")}
     group_names = list(groups.keys())
 
-    print("\n[일원분산분석(ANOVA)] 유도 유형에 따라 점수 평균이 다른가?")
+    # 웹 화면에 표시할 텍스트를 모아둘 변수
+    test_output = ""
+
+    test_output += "[일원분산분석(ANOVA)] 유도 유형에 따라 점수 평균이 다른가?\n"
     try:
         f_stat, p_value = stats.f_oneway(*groups.values())
-        print(f"   F = {f_stat:.3f}, p = {p_value:.4g}")
+        test_output += f"  → F = {f_stat:.3f}, p = {p_value:.4g}\n"
         if p_value < alpha:
-            print(f"   → p < {alpha} 이므로, 통계적으로 유의미함")
+            test_output += f"  → p < {alpha} 이므로, 통계적으로 유의미함 (그룹 간 평균 차이 있음)\n"
         else:
-            print(f"   → p >= {alpha} 이므로, 유의미한 차이가 있다고 보기 어려움")
+            test_output += f"  → p >= {alpha} 이므로, 유의미한 차이가 있다고 보기 어려움\n"
     except Exception as e:
-        print(f" ANOVA 계산 실패: {e}")
+        test_output += f"  ANOVA 계산 실패: {e}\n"
 
-    print("\n[사후검정: 그룹 간 t-test] 어느 조합이 구체적으로 다른가?")
+    test_output += "\n[사후검정: 그룹 간 t-test] 어느 조합이 구체적으로 다른가?\n"
     for name_a, name_b in combinations(group_names, 2):
         if len(groups[name_a]) < 2 or len(groups[name_b]) < 2:
             continue
         t_stat, p_val = stats.ttest_ind(groups[name_a], groups[name_b], equal_var=False)
-        mark = "유의미" if p_val < alpha else "유의미하지 않음"
-        print(f"   {name_a} vs {name_b}: t = {t_stat:.3f}, p = {p_val:.4g} ({mark})")
+        mark = "유의미함 (차이 있음)" if p_val < alpha else "유의미하지 않음 (차이 없음)"
+        test_output += f"  → {name_a} vs {name_b}: t = {t_stat:.3f}, p = {p_val:.4g} ({mark})\n"
 
+    # 1. 터미널에도 기존처럼 출력
+    print(test_output)
+
+    # 2. ★ Streamlit 웹 화면에 예쁜 코드 박스 형태로 출력 ★
+    st.markdown("### 🔬 통계적 유의성 검정 (ANOVA & t-test)")
+    st.code(test_output, language="text")
 
 if __name__ == "__main__":
     if not os.environ.get("GITHUB_TOKEN"):
@@ -289,28 +299,25 @@ if __name__ == "__main__":
             st.session_state.results = results
             st.session_state.experiment_done = True
         st.success(" 분석 완료")
-
-    # 3. 실험 결과가 있거나 이미 완료된 경우 화면에 출력
     if st.session_state.experiment_done or os.path.exists(PROGRESS_FILE):
         st.markdown("---")
-        st.subheader("분석 결과")
+        st.subheader("응답 분석 결과")
         
-        # 저장된 결과 파일 읽어오기
         try:
             df_res = pd.read_csv(PROGRESS_FILE, encoding="utf-8-sig")
             
             col1, col2 = st.columns([1, 1])
-            
             with col1:
                 st.markdown("### 수집된 데이터 표")
                 st.dataframe(df_res, use_container_width=True)
-                
             with col2:
-                st.markdown("### 어조 분포 그래프 ")
+                st.markdown("### 어조 분포 그래프 (Boxplot)")
                 if os.path.exists("bias_result.png"):
                     st.image("bias_result.png", use_container_width=True)
-                else:
-                    st.warning("그래프 이미지 파일(bias_result.png)을 찾을 수 없습니다.")
+
+            # ★ 데이터 표와 그래프 아래에 통계 검정 결과 화면 배치 ★
+            st.markdown("---")
+            run_statistical_tests(df_res)
                     
         except Exception as e:
             st.error(f"결과 데이터를 불러오는 중 오류가 발생했습니다: {e}")
