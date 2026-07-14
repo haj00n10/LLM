@@ -219,7 +219,7 @@ def summarize_and_plot(df: pd.DataFrame, save_path: str = "bias_result.png"):
 
 def run_statistical_tests(df: pd.DataFrame, alpha: float = 0.05):
     if df["유형"].nunique() < 2 or len(df) < 5:
-        st.warning("📊 통계 검정을 진행하기 위한 그룹 수 또는 데이터가 부족합니다.")
+        st.warning("통계 검정을 진행하기 위한 그룹 수 또는 데이터가 부족")
         return
         
     groups = {name: g["긍정"].values for name, g in df.groupby("유형")}
@@ -251,27 +251,13 @@ def run_statistical_tests(df: pd.DataFrame, alpha: float = 0.05):
     print(test_output)
 
     # 2. ★ Streamlit 웹 화면에 예쁜 코드 박스 형태로 출력 ★
-    st.markdown("### 🔬 통계적 유의성 검정 (ANOVA & t-test)")
+    st.markdown("### t-test")
     st.code(test_output, language="text")
 
 if __name__ == "__main__":
-    if not os.environ.get("GITHUB_TOKEN"):
-        raise RuntimeError(
-            "환경변수 GITHUB_TOKEN이 설정되어 있지 않습니다.\n"
-            "로컬 환경이라면 export GITHUB_TOKEN=\"본인의 토큰\" 으로 설정한 뒤 다시 실행하세요."
-        )
-
-    all_prompts = build_prompts(n_repeats=N_REPEATS)
-    print(f" 목표 실험 규모: 총 {len(all_prompts)}개 프롬프트")
-    
-    results = run_experiment_with_checkpoint(all_prompts)
-    
-    summarize_and_plot(results)
-    run_statistical_tests(results)
-
     # 1. 웹 화면 타이틀 구성
     st.set_page_config(page_title="LLM 편향성 분석", layout="wide")
-    st.title("LLM 프롬프트 유도 유형별 편향성 분석")
+    st.title("LLM 유도형 프롬프트 주입에 따른 응답 어조 편향 분석")
     st.write("GitHub Models API(gpt-4o-mini)를 활용하여 프롬프트 어조에 따른 LLM의 응답 성향을 분석합니다.")
     
     # GITHUB_TOKEN 체크
@@ -279,43 +265,41 @@ if __name__ == "__main__":
         st.error("🚨 환경변수 GITHUB_TOKEN이 설정되어 있지 않습니다. Streamlit Secrets 설정을 확인해 주세요.")
         st.stop()
 
-    # 2. 사이드바 또는 상단에 실험 시작 버튼 배치
+    # 2. 상단 제어 패널 (버튼 배치))
     
-    # 세션 상태 초기화 (실행 여부 저장)
     if "experiment_done" not in st.session_state:
         st.session_state.experiment_done = False
 
-    if st.button(" LLM 분석 실험 시작 / 이어서 진행", type="primary"):
+    if st.button(" 분석 시작 / 분석 진행", type="primary"):
         with st.spinner("LLM 질의 및 통계 분석이 진행 중..."):
             all_prompts = build_prompts(n_repeats=N_REPEATS)
-            
-            # 실험 실행
             results = run_experiment_with_checkpoint(all_prompts)
-            
-            # 요약 및 그래프 저장
             summarize_and_plot(results)
             
-            # 통계 데이터 세션에 저장
             st.session_state.results = results
             st.session_state.experiment_done = True
-        st.success(" 분석 완료")
+        st.success("분석완료")
+
+    # 3. 데이터가 있을 때만 '버튼 아래' 쪽에 결과를 순서대로 출력
     if st.session_state.experiment_done or os.path.exists(PROGRESS_FILE):
-        st.markdown("---")
-        st.subheader("응답 분석 결과")
+        st.subheader("분석 결과")
         
         try:
             df_res = pd.read_csv(PROGRESS_FILE, encoding="utf-8-sig")
             
+            # [좌우 배치] 왼쪽엔 표, 오른쪽엔 그래프
             col1, col2 = st.columns([1, 1])
             with col1:
-                st.markdown("### 수집된 데이터 표")
-                st.dataframe(df_res, use_container_width=True)
+                st.markdown("### 수집된 데이터")
+                st.dataframe(df_res, use_container_width=True, height=400)
             with col2:
-                st.markdown("### 어조 분포 그래프 (Boxplot)")
+                st.markdown("### 분포 그래프")
                 if os.path.exists("bias_result.png"):
                     st.image("bias_result.png", use_container_width=True)
+                else:
+                    st.warning("그래프 이미지를 찾을 수 없습니다.")
 
-            # ★ 데이터 표와 그래프 아래에 통계 검정 결과 화면 배치 ★
+            # [맨 밑에 배치] 구분선을 한 번 더 치고, 그 아래에 t-test 통계 결과를 띄웁니다.
             st.markdown("---")
             run_statistical_tests(df_res)
                     
