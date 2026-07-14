@@ -269,65 +269,73 @@ def run_statistical_tests(df: pd.DataFrame, alpha: float = 0.05):
     st.markdown("### t-test")
     st.code(test_output, language="text")
 
-if __name__ == "__main__":
-    # 1. 웹 화면 타이틀 구성
-    st.set_page_config(page_title="LLM 편향성 분석", layout="wide")
-    st.title("LLM 유도형 프롬프트 주입에 따른 응답 어조 편향 분석")
-    st.write("GitHub Models API(gpt-4o-mini)를 활용하여 프롬프트 어조에 따른 LLM의 응답 성향을 분석합니다.")
-    
-    # GITHUB_TOKEN 체크
-    if not os.environ.get("GITHUB_TOKEN"):
-        st.error("🚨 환경변수 GITHUB_TOKEN이 설정되어 있지 않습니다. Streamlit Secrets 설정을 확인해 주세요.")
-        st.stop()
+def run_experiment_with_checkpoint(df_prompts: pd.DataFrame) -> pd.DataFrame:
+    if os.path.exists(PROGRESS_FILE):
+        print(f" 기존 진행 데이터('{PROGRESS_FILE}')를 발견했습니다. 이어서 진행합니다.")
+        try:
+            df_exist = pd.read_csv(PROGRESS_FILE, encoding="utf-8-sig")
+            df_exist.columns = df_exist.columns.astype(str).str.strip()
+        except Exception as e:
+            print(f" 기존 파일을 읽는 중 오류가 발생하여 새로 시작합니다: {e}")
+            df_exist = pd.DataFrame(columns=["유형", "주제", "질문", "긍정"])
+            
+        completed_questions = set(df_exist["질문"].dropna().tolist())
+    else:
+        df_exist = pd.DataFrame(columns=["유형", "주제", "질문", "긍정"])
+        completed_questions = set()
 
-    # 2. 접속자(세션)별 독립 저장소 초기화 -> 이 부분이 핵심입니다!
-    if "my_results" not in st.session_state:
-        st.session_state.my_results = None
+    total = len(df_prompts)
+    new_rows = df_exist.to_dict(orient="records")
 
-    # 3. 상단 제어 패널 (버튼 배치)
-    if st.button(" 분석 시작 / 분석 진행", type="primary"):
-        with st.spinner("LLM 질의 및 통계 분석이 진행 중..."):
-            all_prompts = build_prompts(n_repeats=N_REPEATS)
-            
-            # 다른 사람이 남겨둔 이전 파일 간섭을 줄이기 위해 기존 파일 제거
-            if os.path.exists(PROGRESS_FILE):
-                try: os.remove(PROGRESS_FILE)
-                except: pass
-            
-            results = run_experiment_with_checkpoint(all_prompts)
-            
-            # 사용자용 임시 그래프 경로로 저장
-            user_graph_path = "temp_user_result.png"
-            summarize_and_plot(results, save_path=user_graph_path)
-            
-            # 결과를 공유 서버가 아닌 이 사람의 브라우저 메모리에 저장
-            st.session_state.my_results = results
-            
-        st.success("분석완료")
+    # 💡 [추가] 웹 화면에 실시간으로 진행률을 보여줄 Streamlit 컴포넌트 생성
+    progress_text = st.empty()
+    progress_bar = st.progress(0)
 
-    # 4. 내 메모리에 분석 결과 데이터가 들어있을 때만 화면에 출력
-    if st.session_state.my_results is not None:
-        st.subheader("분석 결과")
+    for idx, row in df_prompts.iterrows():
+        question = row["질문"]
+        
+        # 현재 몇 번째 진행 중인지 비율 계산 (0.0 ~ 1.0)
+        current_progress = (idx + 1) / total
+        
+        # 💡 [추가] 웹 화면 텍스트와 바 업데이트
+        progress_text.markdown(f"**⏳ 총 {total}개 중 {idx + 1}번째 질의 중...** (완료: {int(current_progress * 100)}%)")
+        progress_bar.progress(current_progress)
+
+        if question in completed_questions:
+            continue
+            
+        print(f"   [{idx + 1}/{total}] 질의 중...")
         
         try:
-            # CSV를 읽지 않고 메모리에 저장된 데이터를 바로 사용
-            df_res = st.session_state.my_results
+            score = query_combined_llm(question)
             
-            # [좌우 배치] 왼쪽엔 표, 오른쪽엔 그래프
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                st.markdown("### 수집된 데이터")
-                st.dataframe(df_res, use_container_width=True, height=400)
-            with col2:
-                st.markdown("### 분포 그래프")
-                if os.path.exists("temp_user_result.png"):
-                    st.image("temp_user_result.png", use_container_width=True)
-                else:
-                    st.warning("그래프 이미지를 찾을 수 없습니다.")
-
-            # [맨 밑에 배치] 구분선 아래 t-test 통계 결과 출력
-            st.markdown("---")
-            run_statistical_tests(df_res)
-                    
+            new_data = {
+                "유형": row["유형"],
+                "주제": row["주제"],
+                "질문": question,
+                "긍정": score
+            }
+            new_rows.append(new_data)
+            completed_questions.add(question)
+            
+            df_to_save = pd.DataFrame(new_rows)
+            df_to_save.to_csv(PROGRESS_FILE, index=False, encoding="utf-8-sig")
+            
+            time.sleep(2.0)
+            
         except Exception as e:
+            print(f"\n🛑 에러 또는 한도 초과 발생: {e}")
+            st.error(f"실험 중 오류가 발생했습니다: {e}")
+            break
+
+    # 💡 [추가] 끝나면 진행바와 진행 텍스트 깔끔하게 숨기기
+    progress_text.empty()
+    progress_bar.empty()
+
+    df_final = pd.DataFrame(new_rows)
+    if df_final.empty:
+        df_final = pd.DataFrame(columns=["유형", "주제", "질문", "긍정"])
+    
+    df_final.columns = df_final.columns.astype(str).str.strip()
+    return df_final
             st.error(f"결과 데이터를 불러오는 중 오류가 발생했습니다: {e}")
