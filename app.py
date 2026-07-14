@@ -265,27 +265,38 @@ if __name__ == "__main__":
         st.error("🚨 환경변수 GITHUB_TOKEN이 설정되어 있지 않습니다. Streamlit Secrets 설정을 확인해 주세요.")
         st.stop()
 
-    # 2. 상단 제어 패널 (버튼 배치))
-    
-    if "experiment_done" not in st.session_state:
-        st.session_state.experiment_done = False
+    # 2. 접속자(세션)별 독립 저장소 초기화 -> 이 부분이 핵심입니다!
+    if "my_results" not in st.session_state:
+        st.session_state.my_results = None
 
+    # 3. 상단 제어 패널 (버튼 배치)
     if st.button(" 분석 시작 / 분석 진행", type="primary"):
         with st.spinner("LLM 질의 및 통계 분석이 진행 중..."):
             all_prompts = build_prompts(n_repeats=N_REPEATS)
-            results = run_experiment_with_checkpoint(all_prompts)
-            summarize_and_plot(results)
             
-            st.session_state.results = results
-            st.session_state.experiment_done = True
+            # 다른 사람이 남겨둔 이전 파일 간섭을 줄이기 위해 기존 파일 제거
+            if os.path.exists(PROGRESS_FILE):
+                try: os.remove(PROGRESS_FILE)
+                except: pass
+            
+            results = run_experiment_with_checkpoint(all_prompts)
+            
+            # 사용자용 임시 그래프 경로로 저장
+            user_graph_path = "temp_user_result.png"
+            summarize_and_plot(results, save_path=user_graph_path)
+            
+            # 결과를 공유 서버가 아닌 이 사람의 브라우저 메모리에 저장
+            st.session_state.my_results = results
+            
         st.success("분석완료")
 
-    # 3. 데이터가 있을 때만 '버튼 아래' 쪽에 결과를 순서대로 출력
-    if st.session_state.experiment_done or os.path.exists(PROGRESS_FILE):
+    # 4. 내 메모리에 분석 결과 데이터가 들어있을 때만 화면에 출력
+    if st.session_state.my_results is not None:
         st.subheader("분석 결과")
         
         try:
-            df_res = pd.read_csv(PROGRESS_FILE, encoding="utf-8-sig")
+            # CSV를 읽지 않고 메모리에 저장된 데이터를 바로 사용
+            df_res = st.session_state.my_results
             
             # [좌우 배치] 왼쪽엔 표, 오른쪽엔 그래프
             col1, col2 = st.columns([1, 1])
@@ -294,12 +305,12 @@ if __name__ == "__main__":
                 st.dataframe(df_res, use_container_width=True, height=400)
             with col2:
                 st.markdown("### 분포 그래프")
-                if os.path.exists("bias_result.png"):
-                    st.image("bias_result.png", use_container_width=True)
+                if os.path.exists("temp_user_result.png"):
+                    st.image("temp_user_result.png", use_container_width=True)
                 else:
                     st.warning("그래프 이미지를 찾을 수 없습니다.")
 
-            # [맨 밑에 배치] 구분선을 한 번 더 치고, 그 아래에 t-test 통계 결과를 띄웁니다.
+            # [맨 밑에 배치] 구분선 아래 t-test 통계 결과 출력
             st.markdown("---")
             run_statistical_tests(df_res)
                     
